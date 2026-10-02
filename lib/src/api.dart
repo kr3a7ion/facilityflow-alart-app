@@ -37,6 +37,71 @@ class WaitingJob {
       );
 }
 
+/// Somebody — a supervisor, a team lead — ringing this person's device.
+///
+/// Not a job: a person who needs them now. It rings until it is answered with "I am here",
+/// from this phone or any other device signed in as them, or until the host stops listing
+/// it half an hour later.
+class Ring {
+  const Ring({required this.id, required this.reason, required this.byName});
+
+  final String id;
+  final String? reason;
+  final String byName;
+
+  static Ring fromJson(Map<String, dynamic> j) => Ring(
+        id: j['id'] as String,
+        reason: j['reason'] as String?,
+        byName: j['rung_by_name'] as String? ?? 'Somebody',
+      );
+}
+
+/// An emergency alert raised to the whole property — fire, power, water, security.
+///
+/// It rings until this person acknowledges it, and then goes quiet on this phone even
+/// though the alert itself stays live until somebody stands it down: the roll call is the
+/// point, and "I have seen this" is how this person gets onto it.
+class Emergency {
+  const Emergency({
+    required this.id,
+    required this.category,
+    required this.message,
+    required this.raisedBy,
+    required this.location,
+    required this.acknowledgedByMe,
+  });
+
+  final String id;
+  final String category;
+  final String message;
+  final String raisedBy;
+  final String? location;
+  final bool acknowledgedByMe;
+
+  String get categoryWord => const {
+        'fire': 'Fire',
+        'power': 'Power',
+        'water': 'Water',
+        'security': 'Security',
+        'medical': 'Medical',
+      }[category] ??
+      'Emergency';
+
+  static Emergency fromJson(Map<String, dynamic> j, String myUserId) {
+    final roll = (j['rollCall'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    final me = roll.where((p) => p['userId'] == myUserId).firstOrNull;
+    return Emergency(
+      id: j['id'] as String,
+      category: j['category'] as String? ?? 'other',
+      message: j['message'] as String? ?? '',
+      raisedBy: j['raised_by_name'] as String? ?? '',
+      location: j['location_name'] as String?,
+      acknowledgedByMe: me != null && me['acknowledgedAt'] != null,
+    );
+  }
+}
+
 /// Raised when the host no longer recognises this phone — unpaired, or the account
 /// disabled. Distinct from a network failure on purpose: one means stop and tell the
 /// person, the other means keep trying.
@@ -75,6 +140,58 @@ class Api {
         .toList();
   }
 
+  Future<Map<String, dynamic>> _getJson(String path) async {
+    final r = await http
+        .get(Uri.parse('$baseUrl$path'), headers: _headers)
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode == 401) throw const Unpaired();
+    if (r.statusCode != 200) {
+      throw http.ClientException('$path failed: ${r.statusCode}');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  Future<void> _post(String path, [Map<String, dynamic> body = const {}]) async {
+    final r = await http
+        .post(Uri.parse('$baseUrl$path'), headers: _headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode == 401) throw const Unpaired();
+    if (r.statusCode >= 400) {
+      throw http.ClientException('$path failed: ${r.statusCode} ${r.body}');
+    }
+  }
+
+  /// Who this phone belongs to. Needed to find this person on an emergency's roll call,
+  /// and asked of the host for phones paired before the id was kept in [Config].
+  Future<String> myUserId() async {
+    final body = await _getJson('/api/me');
+    return (body['user'] as Map<String, dynamic>)['id'] as String;
+  }
+
+  /// Rings waiting for this person: unanswered and less than half an hour old.
+  Future<List<Ring>> rings() async {
+    final body = await _getJson('/api/me/rings');
+    return (body['rings'] as List<dynamic>? ?? const [])
+        .map((e) => Ring.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// "I am here." Stops the ringing on every device of this person's, and tells whoever
+  /// rang that they answered.
+  Future<void> answerRing(String ringId) => _post('/api/me/rings/$ringId/ack');
+
+  /// Every live emergency, whether or not this person has acknowledged it yet.
+  Future<List<Emergency>> emergencies(String myUserId) async {
+    final body = await _getJson('/api/alerts/emergency');
+    return (body['active'] as List<dynamic>? ?? const [])
+        .map((e) => Emergency.fromJson(e as Map<String, dynamic>, myUserId))
+        .toList();
+  }
+
+  /// "I have seen this." The host records it as reached by phone on the roll call.
+  Future<void> acknowledgeEmergency(String alertId) =>
+      _post('/api/alerts/emergency/$alertId/ack', {'via': 'phone'});
+
   Future<void> accept(String jobId) async {
     final r = await http
         .post(Uri.parse('$baseUrl/api/jobs/$jobId/accept'),
@@ -107,10 +224,16 @@ class Api {
             'appVersion': appVersion,
           }),
         )
-        .timeout(const Duration(seconds: 20));
-    final body = jsonDecode(r.body) as Map<String, dynamic>;
-    if (r.statusCode != 201) {
-      throw Exception(body['message'] as String? ??
+        .timeout(const Duration(seconds: 10));
+    Map<String, dynamic>? body;
+    try {
+      body = jsonDecode(r.body) as Map<String, dynamic>;
+    } catch (_) {
+      // Something answered that is not FacilityFlow — a router's login page, another
+      // service on that port. Say so rather than failing on the parse.
+    }
+    if (r.statusCode != 201 || body == null) {
+      throw Exception(body?['message'] as String? ??
           'That did not work. Generate a fresh code on the website and try again.');
     }
     return body;
