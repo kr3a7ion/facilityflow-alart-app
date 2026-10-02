@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Plain HTTP to the property network.
+
+  This is the setting that decides whether the app works at all. Android 9 and later
+  refuse cleartext HTTP by default, and the host serves `http://192.168.x.x:4700` because
+  it is an offline LAN with no certificate authority to get one from. Without this file
+  every request fails with a cleartext-not-permitted error that looks, from the phone,
+  exactly like the host being switched off.
+
+  Why this is not scoped to the private ranges: Android's <domain> element matches host
+  names literally (plus subdomains). It does not understand CIDR, so an entry like
+  `192.168.0.0/16` never matches `192.168.1.50` and cleartext stays blocked. There is no
+  way to express "any RFC1918 address" here, and the host's address is not known at build
+  time. The app only ever talks to the base URL it was paired with, so allowing cleartext
+  generally does not widen what it actually reaches.
+
+  If the host is later given a locally-trusted certificate, add a <trust-anchors> block
+  pointing at the CA and set cleartextTrafficPermitted to false — the app will then refuse
+  to fall back to plaintext, which is the right end state.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

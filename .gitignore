@@ -1,0 +1,51 @@
+# Dart / Flutter generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+coverage/
+
+# Keep pubspec.lock tracked for this application.
+
+# IDEs and editor state
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Android / Gradle generated files and local configuration
+.gradle/
+/android/.gradle/
+/android/**/build/
+android/local.properties
+android/key.properties
+**/*.keystore
+**/*.jks
+
+# iOS / macOS generated files and dependencies
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/Flutter/.last_build_id
+**/ServiceDefinitions.json
+**/GeneratedPluginRegistrant.*
+
+# Native build outputs (Linux / Windows / macOS)
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/compile_commands.json
+**/ephemeral/
+
+# Logs, temporary files, and OS-generated files
+*.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,45 @@
+name: facilityflow_alerts
+description: >-
+  Rings a maintenance technician's phone when a job is assigned to them, on a property
+  with no internet. Holds a connection to the FacilityFlow host on the local wifi and
+  raises an alarm the moment work arrives.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The foreground service. Everything else in this app is ordinary Flutter; this is the
+  # piece that makes it keep working with the screen off and the app swiped away.
+  flutter_foreground_task: ^8.10.4
+
+  # Heads-up notifications with an Accept action, so a job can be taken from the lock
+  # screen without unlocking the phone.
+  flutter_local_notifications: ^17.2.3
+
+  # Alarm audio. Played on the ALARM stream deliberately — see alarm.dart.
+  audioplayers: ^6.1.0
+
+  vibration: ^2.0.0
+
+  # One scan sets the whole thing up: host address and identity together.
+  mobile_scanner: ^7.0.0
+
+  http: ^1.2.2
+  # "Open the full system" hands the host address to the phone's browser.
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
