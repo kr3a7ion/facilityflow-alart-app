@@ -24,9 +24,17 @@ not a defect.
 ## What it does
 
 - Holds `GET /api/events` open — the same stream the website uses.
-- When work lands, rings on the **alarm audio stream**, so it is heard through a phone set
-  to silent, and vibrates.
-- Shows a heads-up notification with an **Accept** button that works from the lock screen.
+- Rings for three things, most urgent first:
+  1. an **emergency alert** this person has not acknowledged — **I have seen this**;
+  2. **somebody ringing them** (the bell / *Ring* on the website) — **I am here**;
+  3. a **job assigned to them** and not yet accepted — **Accept**.
+
+  Every nudge on the stream re-asks the host for all three (`/api/alerts/emergency`,
+  `/api/me/rings`, `/api/me/outstanding`), so a reconnect settles everything at once.
+- Rings on the **alarm audio stream**, so it is heard through a phone set to silent, and
+  vibrates.
+- Shows a heads-up notification whose button works from the lock screen; emergencies and
+  rings wake the screen.
 - Keeps ringing until the job is accepted, reassigned or cancelled — or until its response
   deadline passes, at which point the host escalates to a human and the phone goes quiet.
 - Reports its connection to the host continuously, so a supervisor can see a phone that

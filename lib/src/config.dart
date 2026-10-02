@@ -15,6 +15,7 @@ class Config {
     required this.roleName,
     required this.propertyName,
     required this.deviceId,
+    this.userId = '',
   });
 
   final String baseUrl;
@@ -24,12 +25,17 @@ class Config {
   final String propertyName;
   final String deviceId;
 
+  /// The account this phone belongs to. Empty on phones paired before it was kept; the
+  /// service asks the host once in that case.
+  final String userId;
+
   static const _kUrl = 'ff.url';
   static const _kToken = 'ff.token';
   static const _kName = 'ff.name';
   static const _kRole = 'ff.role';
   static const _kProperty = 'ff.property';
   static const _kDevice = 'ff.device';
+  static const _kUser = 'ff.user';
 
   static Future<Config?> load() async {
     final p = await SharedPreferences.getInstance();
@@ -46,6 +52,7 @@ class Config {
       roleName: p.getString(_kRole) ?? '',
       propertyName: p.getString(_kProperty) ?? '',
       deviceId: p.getString(_kDevice) ?? '',
+      userId: p.getString(_kUser) ?? '',
     );
   }
 
@@ -57,11 +64,12 @@ class Config {
     await p.setString(_kRole, roleName);
     await p.setString(_kProperty, propertyName);
     await p.setString(_kDevice, deviceId);
+    await p.setString(_kUser, userId);
   }
 
   static Future<void> clear() async {
     final p = await SharedPreferences.getInstance();
-    for (final k in [_kUrl, _kToken, _kName, _kRole, _kProperty, _kDevice]) {
+    for (final k in [_kUrl, _kToken, _kName, _kRole, _kProperty, _kDevice, _kUser]) {
       await p.remove(k);
     }
   }
