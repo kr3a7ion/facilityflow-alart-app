@@ -1,0 +1,67 @@
+# Builds the phone app on GitHub, so nobody needs a Flutter toolchain on their own machine.
+#
+# Every push and pull request runs analyze, the tests, and a release build. The APK is
+# attached to the run as an artifact: open the run on the Actions tab, scroll to
+# "Artifacts", download, unzip, and copy app-release.apk onto the host PC as data/app.apk.
+#
+# Signing: with no android/key.properties the release build is signed with the debug key
+# (see android/app/build.gradle.kts). That installs fine. No keystore or secret is read here.
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGP 9 and Gradle 9 need JDK 17 or newer.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # pubspec.lock asks for Flutter >= 3.44.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: flutter --version
+
+      - name: Get packages
+        run: flutter pub get
+
+      # Warnings and infos are reported, not fatal: the job is to get a build into
+      # somebody's hand. Errors still fail the run.
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: facilityflow-alerts-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+          if-no-files-found: error
