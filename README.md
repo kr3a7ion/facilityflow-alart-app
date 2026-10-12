@@ -46,6 +46,13 @@ tablet, the supervisor's browser. One source of truth.
 
 ## Building it
 
+**Without installing anything:** every push to `main` and every pull request is built on
+GitHub by `.github/workflows/build-apk.yml`. Open the run on the repository's **Actions**
+tab, download the `facilityflow-alerts-<commit>` artifact under **Artifacts**, and unzip it
+to get `app-release.apk`. The **Run workflow** button builds `main` on demand.
+
+**On your own machine** (Flutter 3.44 or newer):
+
 ```bash
 flutter pub get
 flutter build apk --release
