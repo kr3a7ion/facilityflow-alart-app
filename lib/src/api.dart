@@ -10,6 +10,7 @@ class WaitingJob {
     required this.title,
     required this.priority,
     required this.respondBy,
+    this.ringUntil,
   });
 
   final String id;
@@ -18,13 +19,30 @@ class WaitingJob {
   final String priority;
   final DateTime? respondBy;
 
+  /// When the host says to stop ringing: a full response window from when the job was
+  /// handed to this person, never earlier than [respondBy]. Null from a host older than
+  /// the field, which is then treated as [respondBy].
+  final DateTime? ringUntil;
+
   bool get isEmergency => priority == 'P1';
 
-  /// Past this the host escalates to a team lead and then a supervisor. The phone stops
-  /// ringing at the same moment: a handset that alarms all night is a handset in a
-  /// drawer by morning, and a human chasing it is a better answer than more volume.
+  /// Past this the host escalates to a team lead and then a supervisor. Shown on the home
+  /// screen; it is not what silences the phone — see [ringingOver].
   bool get pastDeadline =>
       respondBy != null && DateTime.now().toUtc().isAfter(respondBy!);
+
+  /// Whether the phone should stop ringing about this job.
+  ///
+  /// Not [pastDeadline]. The response deadline is measured from when the fault was
+  /// reported, so a job assigned after it — left unassigned too long, reassigned after
+  /// somebody went home, or sent back for rework — arrived already past it and never rang
+  /// at all. The ringing still stops in the end: a handset that alarms all night is a
+  /// handset in a drawer by morning, and a human chasing it is a better answer than more
+  /// volume.
+  bool get ringingOver {
+    final until = ringUntil ?? respondBy;
+    return until != null && DateTime.now().toUtc().isAfter(until);
+  }
 
   static WaitingJob fromJson(Map<String, dynamic> j) => WaitingJob(
         id: j['id'] as String,
@@ -34,6 +52,9 @@ class WaitingJob {
         respondBy: j['respond_by'] == null
             ? null
             : DateTime.tryParse(j['respond_by'] as String)?.toUtc(),
+        ringUntil: j['ring_until'] == null
+            ? null
+            : DateTime.tryParse(j['ring_until'] as String)?.toUtc(),
       );
 }
 
@@ -191,6 +212,20 @@ class Api {
   /// "I have seen this." The host records it as reached by phone on the roll call.
   Future<void> acknowledgeEmergency(String alertId) =>
       _post('/api/alerts/emergency/$alertId/ack', {'via': 'phone'});
+
+  /// Tell the host this phone is leaving, so its token dies with it and the supervisor's
+  /// screen stops listing a phone somebody deliberately unpaired as "not running".
+  Future<void> forget(String deviceId) async {
+    final r = await http
+        .delete(Uri.parse('$baseUrl/api/me/devices/$deviceId'), headers: {
+          'Authorization': 'Bearer $token',
+        })
+        .timeout(const Duration(seconds: 5));
+    if (r.statusCode == 401) throw const Unpaired();
+    if (r.statusCode >= 400 && r.statusCode != 404) {
+      throw http.ClientException('unpair failed: ${r.statusCode}');
+    }
+  }
 
   Future<void> accept(String jobId) async {
     final r = await http

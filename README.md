@@ -35,8 +35,11 @@ not a defect.
   vibrates.
 - Shows a heads-up notification whose button works from the lock screen; emergencies and
   rings wake the screen.
-- Keeps ringing until the job is accepted, reassigned or cancelled — or until its response
-  deadline passes, at which point the host escalates to a human and the phone goes quiet.
+- Keeps ringing until the job is accepted, reassigned or cancelled — or until the host's
+  `ring_until` passes: a full response time from when the job was handed to this person,
+  never earlier than its response deadline. A job assigned late, reassigned, or sent back
+  for rework still rings; past the window the host has escalated to a human and the phone
+  goes quiet.
 - Reports its connection to the host continuously, so a supervisor can see a phone that
   has stopped listening.
 
@@ -66,9 +69,9 @@ off the notice board. It is backed up with everything else, so restoring the dat
 a new PC restores the installer too.
 
 > This app was written against the running server and every endpoint and field name was
-> checked against live responses, but it has **not been compiled or run on a device** —
-> that needs a Flutter toolchain and an Android handset. Expect to fix small things on the
-> first build; the shape is right.
+> checked against live responses. It is built, analysed and tested on GitHub on every push,
+> but it has **not yet been run on a handset** — the checklist under *Checking it works* is
+> the first real test.
 
 ## Installing on a phone
 

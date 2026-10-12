@@ -38,8 +38,11 @@ class Alarm {
     // sounds broken.
     if (_running && _voice == voice) return;
 
-    _voice = voice;
-    _running = true;
+    // Marked running only once it is: a start that throws part-way must not leave this
+    // believing the noise is already playing, or every later start would return early and
+    // the phone would stay silent until something called stop().
+    _voice = null;
+    _running = false;
 
     await _player.setAudioContext(
       AudioContext(
@@ -60,6 +63,8 @@ class Alarm {
 
     await _player.stop();
     await _player.play(AssetSource(voice), volume: 1.0);
+    _voice = voice;
+    _running = true;
 
     // Vibration alongside, not instead: a phone in a thick pocket next to a running set
     // is felt long before it is heard.
@@ -75,7 +80,8 @@ class Alarm {
   }
 
   Future<void> stop() async {
-    if (!_running) return;
+    // A buzz timer left by a start that failed after it was set counts as running too.
+    if (!_running && _buzz == null) return;
     _running = false;
     _voice = null;
     _buzz?.cancel();

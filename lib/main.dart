@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import 'src/api.dart';
 import 'src/config.dart';
 import 'src/home_screen.dart';
 import 'src/pair_screen.dart';
@@ -90,6 +91,17 @@ class _AlertsAppState extends State<AlertsApp> {
   }
 
   Future<void> _unpair() async {
+    // Tell the host first, so the token dies with the pairing and a supervisor is not
+    // shown a phone somebody deliberately unpaired as "not running". Best effort: off the
+    // wifi, or already unpaired on the website, the phone must still let go.
+    final config = _config;
+    if (config != null && config.deviceId.isNotEmpty) {
+      try {
+        await Api(config.baseUrl, config.token).forget(config.deviceId);
+      } catch (_) {
+        // Unreachable or already forgotten; an admin can still unpair it from the website.
+      }
+    }
     await FlutterForegroundTask.stopService();
     await Config.clear();
     if (mounted) setState(() => _config = null);

@@ -210,18 +210,11 @@ class AlertTaskHandler extends TaskHandler {
 
     final emergencies = next.emergencies.where((e) => !e.acknowledgedByMe).toList();
     final rings = next.rings;
-    final jobs = next.jobs.where((j) => !j.pastDeadline).toList();
+    final jobs = next.jobs.where((j) => !j.ringingOver).toList();
 
-    // ---- the noise: one alarm, at the most urgent level anything calls for ----
-    if (emergencies.isNotEmpty || rings.isNotEmpty) {
-      await _alarm?.start(urgent: true);
-    } else if (jobs.isNotEmpty) {
-      await _alarm?.start(urgent: jobs.any((j) => j.isEmergency));
-    } else {
-      await _alarm?.stop();
-    }
-
-    // ---- the notifications: post what is new, withdraw what has gone ----------
+    // ---- the notifications first: post what is new, withdraw what has gone ----
+    // Before the noise, so a sound that fails to start can never also take the banner
+    // and its Accept button down with it.
     // Re-posting one that is already up would re-slam the heads-up banner over whatever
     // the person is doing every time a nudge arrives, so only new ones are shown.
     final wanted = <int>{};
@@ -244,6 +237,20 @@ class AlertTaskHandler extends TaskHandler {
     for (final id in _posted.difference(wanted).toList()) {
       await _notifications.cancel(id);
       _posted.remove(id);
+    }
+
+    // ---- the noise: one alarm, at the most urgent level anything calls for ----
+    try {
+      if (emergencies.isNotEmpty || rings.isNotEmpty) {
+        await _alarm?.start(urgent: true);
+      } else if (jobs.isNotEmpty) {
+        await _alarm?.start(urgent: jobs.any((j) => j.isEmergency));
+      } else {
+        await _alarm?.stop();
+      }
+    } catch (_) {
+      // The audio stack refused. The notifications above are already up and vibrate is
+      // separate; the next refresh tries the sound again.
     }
     await _updateOngoing();
   }

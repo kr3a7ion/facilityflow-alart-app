@@ -32,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _userId;
   bool _reachable = true;
   bool _loading = true;
+
+  /// The host answered and no longer knows this phone. Said on screen rather than acted
+  /// on: wiping the pairing on the spot also fired for a host restored from an older
+  /// backup, and threw away a pairing the person had no way to know was gone.
+  bool _unpairedOnHost = false;
   Timer? _poll;
 
   late final Api _api = Api(widget.config.baseUrl, widget.config.token);
@@ -67,11 +72,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _emergencies = (results[2] as List<Emergency>).where((e) => !e.acknowledgedByMe).toList();
         _reachable = true;
         _loading = false;
+        _unpairedOnHost = false;
       });
     } on Unpaired {
       if (!mounted) return;
-      setState(() { _reachable = true; _loading = false; });
-      widget.onUnpair();
+      setState(() { _reachable = true; _loading = false; _unpairedOnHost = true; });
     } catch (_) {
       if (!mounted) return;
       setState(() { _reachable = false; _loading = false; });
@@ -121,19 +126,34 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
-              color: _reachable
-                  ? Theme.of(context).colorScheme.secondaryContainer
-                  : Theme.of(context).colorScheme.errorContainer,
-              child: ListTile(
-                leading: Icon(_reachable ? Icons.wifi_tethering : Icons.wifi_off),
-                title: Text(_reachable ? 'Listening for jobs' : 'Cannot reach the host'),
-                subtitle: Text(_reachable
-                    ? '${c.displayName} · ${c.roleName}'
-                    : 'Check you are on the property wifi. The app cannot alert you from '
-                      'outside the building.'),
+            if (_unpairedOnHost)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.link_off),
+                  title: const Text('This phone is no longer paired'),
+                  subtitle: const Text('It was unpaired on the website, or the account was '
+                      'disabled. It will not ring until it is paired again.'),
+                  trailing: FilledButton(
+                    onPressed: widget.onUnpair,
+                    child: const Text('Pair again'),
+                  ),
+                ),
+              )
+            else
+              Card(
+                color: _reachable
+                    ? Theme.of(context).colorScheme.secondaryContainer
+                    : Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  leading: Icon(_reachable ? Icons.wifi_tethering : Icons.wifi_off),
+                  title: Text(_reachable ? 'Listening for jobs' : 'Cannot reach the host'),
+                  subtitle: Text(_reachable
+                      ? '${c.displayName} · ${c.roleName}'
+                      : 'Check you are on the property wifi. The app cannot alert you from '
+                        'outside the building.'),
+                ),
               ),
-            ),
             const SizedBox(height: 16),
             // The building first, then a person, then the work.
             for (final e in _emergencies)
