@@ -51,8 +51,42 @@ tablet, the supervisor's browser. One source of truth.
 
 **Without installing anything:** every push to `main` and every pull request is built on
 GitHub by `.github/workflows/build-apk.yml`. Open the run on the repository's **Actions**
-tab, download the `facilityflow-alerts-<commit>` artifact under **Artifacts**, and unzip it
-to get `app-release.apk`. The **Run workflow** button builds `main` on demand.
+tab, download the `facilityflow-alerts-<version>-<build>` artifact under **Artifacts**, and
+unzip it to get `app-release.apk`. The **Run workflow** button builds `main` on demand. Each
+build is numbered from the run that made it, so every APK is newer than the last, and the
+app reports that version to the host when it pairs.
+
+### Signing — do this once, before handing out the first APK
+
+Android installs an update only if it is signed with the same key as the app already on the
+phone. Without a key of its own the workflow signs with a throwaway one that changes on
+every run, so every new APK means uninstalling first — which throws away the pairing — and
+the run says so with a **Not release-signed** warning.
+
+Make the key once, on any machine with a JDK, and keep it:
+
+```bash
+keytool -genkeypair -v -keystore facilityflow-release.jks -keyalg RSA -keysize 4096 \
+  -validity 10000 -alias facilityflow
+base64 -w0 facilityflow-release.jks > facilityflow-release.jks.b64   # macOS: base64 -i … -o …
+```
+
+Then add four secrets under the repository's **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the contents of `facilityflow-release.jks.b64` |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password you chose |
+| `ANDROID_KEY_ALIAS` | `facilityflow` |
+| `ANDROID_KEY_PASSWORD` | the key password (the same as the keystore's unless you set another) |
+
+**Keep `facilityflow-release.jks` and its passwords somewhere safe and off this repository**
+— a password manager, and a copy on a drive in the office. Lose them and the next APK cannot
+update any phone: every one has to uninstall and pair again.
+
+Phones that already have a build signed with a throwaway key need that one uninstall, once,
+to move to the real key. Unpair the old phone on the website afterwards so it stops showing
+as "not running".
 
 **On your own machine** (Flutter 3.44 or newer):
 
