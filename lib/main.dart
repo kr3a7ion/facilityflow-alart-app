@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/api.dart';
 import 'src/config.dart';
@@ -55,6 +57,25 @@ class _AlertsAppState extends State<AlertsApp> {
     if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
+    // Android 14+ can withhold full-screen alerts, and then a P1 or an emergency sits in
+    // the shade instead of waking the lock screen. This opens the setting only when it
+    // is off; when it is on it returns straight away.
+    try {
+      await FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestFullScreenIntentPermission();
+    } catch (_) {
+      // Another permission request in flight; the next start asks again.
+    }
+    // Exact alarms decide how fast the service comes back after the system kills it.
+    // Asked once: this one opens a settings page rather than a dialog, and opening it at
+    // every launch for somebody who said no would be nagging.
+    const asked = 'ff.askedExactAlarms';
+    final prefs = await SharedPreferences.getInstance();
+    if (!await FlutterForegroundTask.canScheduleExactAlarms && !(prefs.getBool(asked) ?? false)) {
+      await prefs.setBool(asked, true);
+      await FlutterForegroundTask.openAlarmsAndRemindersSettings();
+    }
   }
 
   Future<void> _startService() async {
@@ -75,6 +96,9 @@ class _AlertsAppState extends State<AlertsApp> {
         autoRunOnMyPackageReplaced: true,
         allowWakeLock: true,
         allowWifiLock: true,
+        // Brought back by the plugin when the system kills it. The default in this
+        // version, said out loud because the whole app depends on it.
+        allowAutoRestart: true,
       ),
     );
 

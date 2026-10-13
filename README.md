@@ -121,11 +121,12 @@ them properly while it is open — and the duty tablet covers the shift.
 |---|---|
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Cannot reach the host at all |
 | `POST_NOTIFICATIONS` | No foreground service notification, so no foreground service |
-| `FOREGROUND_SERVICE`, `..._DATA_SYNC` | The service cannot start on Android 14+ |
+| `FOREGROUND_SERVICE`, `..._SPECIAL_USE` | The service cannot start on Android 14+. Not `dataSync`: Android 15 stops that type after six hours a day and will not start it at boot |
 | `WAKE_LOCK` | CPU sleeps before the alarm is raised |
 | `RECEIVE_BOOT_COMPLETED` | Silently stops listening after a restart |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Doze kills it within hours |
 | `USE_FULL_SCREEN_INTENT` | A P1 waits to be pulled down rather than waking the screen |
+| `SCHEDULE_EXACT_ALARM` | After the system kills the service, the restart can be pushed out by minutes. Off by default on Android 14+; the app opens the setting once |
 | `VIBRATE` | Missed in a pocket next to a running generator |
 
 **`networkSecurityConfig`** is the setting people lose a day to. Android 9+ blocks cleartext
