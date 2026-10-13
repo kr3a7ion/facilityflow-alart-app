@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'alarm.dart';
 import 'api.dart';
 import 'config.dart';
+import 'notices.dart';
 import 'sse.dart';
 
 /// Entry point for the foreground service isolate.
@@ -66,6 +67,7 @@ class _Snapshot {
 class AlertTaskHandler extends TaskHandler {
   SseClient? _sse;
   Alarm? _alarm;
+  Notices? _notices;
   Config? _config;
   Api? _api;
   String? _userId;
@@ -121,14 +123,26 @@ class AlertTaskHandler extends TaskHandler {
     _sse = SseClient(
       url: config.baseUrl,
       token: config.token,
-      onEvent: (_) => unawaited(_refresh()),
+      onEvent: (kind) {
+        unawaited(_refresh());
+        // The bell on the website just changed: show what it says.
+        if (kind == 'notification') unawaited(_notices?.check());
+      },
       onState: (up) {
         _connected = up;
         // Whatever happened while the line was down was never delivered.
-        if (up) unawaited(_refresh());
+        if (up) {
+          unawaited(_refresh());
+          unawaited(_notices?.check());
+        }
         unawaited(_updateOngoing());
       },
     )..start();
+
+    // The person's other notices — escalations, mains failure, a job taken away — shown by
+    // how loud the host says they are. See notices.dart.
+    _notices = Notices(_api!, _notifications);
+    unawaited(_notices!.start());
 
     await _refresh();
   }
@@ -385,6 +399,7 @@ class AlertTaskHandler extends TaskHandler {
   @override
   Future<void> onDestroy(DateTime timestamp) async {
     _sse?.stop();
+    _notices?.stop();
     await _alarm?.dispose();
   }
 
