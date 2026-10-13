@@ -75,6 +75,15 @@
         <!-- The boot/package-replaced receiver comes from flutter_foreground_task's own
              manifest; redeclaring it here with different attributes breaks the merge. -->
 
+        <!-- The lock-screen buttons — Accept, I am here, I have seen this. They are sent
+             without opening the app (showsUserInterface: false), which flutter_local_
+             notifications delivers as a broadcast to this receiver. Its own manifest does
+             not declare it; without this line every press is dropped and the alarm can
+             only be stopped by unlocking the phone and opening the app. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
