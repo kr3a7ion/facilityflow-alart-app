@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// A job handed to this person and not yet picked up.
+/// A job handed to this person, or to a team they lead, and not yet picked up.
 class WaitingJob {
   const WaitingJob({
     required this.id,
@@ -11,6 +11,7 @@ class WaitingJob {
     required this.priority,
     required this.respondBy,
     this.ringUntil,
+    this.teamName,
   });
 
   final String id;
@@ -23,6 +24,11 @@ class WaitingJob {
   /// handed to this person, never earlier than [respondBy]. Null from a host older than
   /// the field, which is then treated as [respondBy].
   final DateTime? ringUntil;
+
+  /// The team's name when the job was handed to a team this person leads and is in nobody's
+  /// name yet. The lead is rung until somebody's name is on it or they accept it themselves.
+  /// Null for a job in this person's own name, and from a host older than the field.
+  final String? teamName;
 
   bool get isEmergency => priority == 'P1';
 
@@ -55,6 +61,7 @@ class WaitingJob {
         ringUntil: j['ring_until'] == null
             ? null
             : DateTime.tryParse(j['ring_until'] as String)?.toUtc(),
+        teamName: j['team_name'] as String?,
       );
 }
 
