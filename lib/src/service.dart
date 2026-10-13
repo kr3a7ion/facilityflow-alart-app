@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'alarm.dart';
 import 'api.dart';
 import 'config.dart';
+import 'ringing.dart';
 import 'sse.dart';
 
 /// Entry point for the foreground service isolate.
@@ -30,14 +31,6 @@ int notificationId(String key) {
   }
   // Keep clear of the foreground service's own notification id.
   return h == 4700 ? 4701 : h;
-}
-
-/// Everything this phone could be asked to ring about, fetched together.
-class _Snapshot {
-  const _Snapshot(this.jobs, this.rings, this.emergencies);
-  final List<WaitingJob> jobs;
-  final List<Ring> rings;
-  final List<Emergency> emergencies;
 }
 
 /// What the phone does while nobody is looking at it.
@@ -71,8 +64,9 @@ class AlertTaskHandler extends TaskHandler {
   String? _userId;
   final _notifications = FlutterLocalNotificationsPlugin();
 
-  _Snapshot _state = const _Snapshot([], [], []);
+  Waiting _state = const Waiting();
   bool _connected = false;
+  DateTime? _heardAt;
   bool _unpaired = false;
   DateTime _lastCheck = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -117,6 +111,7 @@ class AlertTaskHandler extends TaskHandler {
           playSound: false, // the alarm stream handles the noise, not the channel
           enableVibration: false,
         ));
+    await _clearLeftovers();
 
     _sse = SseClient(
       url: config.baseUrl,
@@ -141,6 +136,9 @@ class AlertTaskHandler extends TaskHandler {
     if (DateTime.now().difference(_lastCheck) > const Duration(seconds: 50)) {
       await _refresh();
     }
+    // Every tick, not only on news: an alarm another app's audio took away comes back,
+    // and one the host has stopped confirming goes quiet.
+    await _sound();
     await _updateOngoing();
   }
 
@@ -179,17 +177,31 @@ class AlertTaskHandler extends TaskHandler {
         api.rings().then<Object?>((v) => v, onError: _keepOrRethrow),
         api.emergencies(userId).then<Object?>((v) => v, onError: _keepOrRethrow),
       ]);
-      _unpaired = false;
-      await _apply(_Snapshot(
-        results[0] is List<WaitingJob> ? results[0] as List<WaitingJob> : _state.jobs,
-        results[1] is List<Ring> ? results[1] as List<Ring> : _state.rings,
-        results[2] is List<Emergency> ? results[2] as List<Emergency> : _state.emergencies,
+      final now = DateTime.now();
+      final jobs = results[0] is List<WaitingJob> ? results[0] as List<WaitingJob> : null;
+      final rings = results[1] is List<Ring> ? results[1] as List<Ring> : null;
+      final emergencies = results[2] is List<Emergency> ? results[2] as List<Emergency> : null;
+      // Only an answer from the host clears "unpaired": three failures in a row after an
+      // unpair are a network blip, not the host taking the phone back.
+      if (jobs != null || rings != null || emergencies != null) {
+        _unpaired = false;
+        _heardAt = now;
+      }
+      await _apply(Waiting(
+        jobs: jobs ?? _state.jobs,
+        rings: rings ?? _state.rings,
+        emergencies: emergencies ?? _state.emergencies,
+        jobsAt: jobs != null ? now : _state.jobsAt,
+        ringsAt: rings != null ? now : _state.ringsAt,
+        emergenciesAt: emergencies != null ? now : _state.emergenciesAt,
       ));
     } on Unpaired {
       // The host no longer knows this phone. Stop making noise and say so plainly — this
       // is somebody's phone having been unpaired, or their account disabled, and ringing
-      // about work they can no longer accept helps nobody.
+      // about work they can no longer accept helps nobody. What it last knew goes too, or
+      // a later network blip would bring the old alarms back.
       _unpaired = true;
+      _state = const Waiting();
       await _alarm?.stop();
       await _withdrawAll();
       await _updateOngoing();
@@ -205,10 +217,13 @@ class AlertTaskHandler extends TaskHandler {
     return null;
   }
 
-  Future<void> _apply(_Snapshot next) async {
+  Future<void> _apply(Waiting next) async {
     _state = next;
 
-    final emergencies = next.emergencies.where((e) => !e.acknowledgedByMe).toList();
+    // Banners for everything still waiting as far as the phone knows, confirmed or not:
+    // the person should see what it last heard. Only the noise depends on the host having
+    // confirmed it lately (see _sound).
+    final emergencies = next.openEmergencies;
     final rings = next.rings;
     final jobs = next.jobs.where((j) => !j.ringingOver).toList();
 
@@ -231,7 +246,9 @@ class AlertTaskHandler extends TaskHandler {
       await want('ring:${r.id}', () => _showRing(r));
     }
     for (final j in jobs) {
-      await want('job:${j.id}', () => _showJob(j));
+      // Keyed on the priority too, so a job raised to P1 is posted again — with the
+      // full-screen wake a P1 gets — rather than left as the quieter banner it was.
+      await want('job:${j.id}:${j.priority}', () => _showJob(j));
     }
 
     for (final id in _posted.difference(wanted).toList()) {
@@ -239,20 +256,40 @@ class AlertTaskHandler extends TaskHandler {
       _posted.remove(id);
     }
 
-    // ---- the noise: one alarm, at the most urgent level anything calls for ----
+    await _sound();
+    await _updateOngoing();
+  }
+
+  /// One alarm, at the most urgent level anything the host has confirmed calls for.
+  Future<void> _sound() async {
     try {
-      if (emergencies.isNotEmpty || rings.isNotEmpty) {
-        await _alarm?.start(urgent: true);
-      } else if (jobs.isNotEmpty) {
-        await _alarm?.start(urgent: jobs.any((j) => j.isEmergency));
-      } else {
-        await _alarm?.stop();
+      switch (soundFor(_state, DateTime.now())) {
+        case Sound.urgent:
+          await _alarm?.start(urgent: true);
+        case Sound.normal:
+          await _alarm?.start(urgent: false);
+        case Sound.none:
+          await _alarm?.stop();
       }
     } catch (_) {
-      // The audio stack refused. The notifications above are already up and vibrate is
-      // separate; the next refresh tries the sound again.
+      // The audio stack refused. The notifications are already up and vibrate is
+      // separate; the next tick tries the sound again.
     }
-    await _updateOngoing();
+  }
+
+  /// Job banners left by an earlier run of this service — killed, restarted, or replaced
+  /// by an update — which this run does not know it owns and so would never withdraw.
+  /// The next refresh posts again whatever is still waiting.
+  Future<void> _clearLeftovers() async {
+    try {
+      final android = _notifications.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      for (final n in await android?.getActiveNotifications() ?? const <ActiveNotification>[]) {
+        if (n.channelId == _channelId && n.id != null) await _notifications.cancel(n.id!);
+      }
+    } catch (_) {
+      // Not worth failing the start over; at worst a stale banner stays until dismissed.
+    }
   }
 
   Future<void> _withdrawAll() async {
@@ -332,21 +369,31 @@ class AlertTaskHandler extends TaskHandler {
     final config = _config;
     final String title;
     final String text;
-    final emergencies = _state.emergencies.where((e) => !e.acknowledgedByMe).toList();
+    final emergencies = _state.openEmergencies;
+    final now = DateTime.now();
 
     if (_unpaired) {
       title = 'This phone has been unpaired';
       text = 'Pair it again from the website to get job alerts.';
+    } else if (_state.lostContact(now)) {
+      // Something was waiting when the host stopped answering. Said plainly, because the
+      // alarm has gone quiet for a reason the person cannot otherwise see.
+      title = 'Lost contact with the host';
+      text = 'Showing what it last said. The alarm is quiet until it answers — check the '
+          'property wifi.';
     } else if (emergencies.isNotEmpty) {
       title = '${emergencies.first.categoryWord} alert';
       text = emergencies.first.message;
     } else if (_state.rings.isNotEmpty) {
       title = '${_state.rings.first.byName} is ringing you';
       text = 'Open the notification and press "I am here".';
-    } else if (_state.jobs.isNotEmpty) {
-      final n = _state.jobs.length;
+    } else if (_state.jobs.any((j) => !j.ringingOver)) {
+      // Only jobs still ringing: one past its window is a person's problem now, and
+      // counting it here also hid "Not connected" behind an old job.
+      final live = _state.jobs.where((j) => !j.ringingOver).toList();
+      final n = live.length;
       title = n == 1 ? 'A job is waiting for you' : '$n jobs are waiting for you';
-      text = _state.jobs.first.title;
+      text = live.first.title;
     } else if (_connected) {
       title = 'Listening for jobs';
       text = config == null
@@ -361,6 +408,11 @@ class AlertTaskHandler extends TaskHandler {
     await FlutterForegroundTask.updateService(
       notificationTitle: title,
       notificationText: text,
+    );
+    // And the same truth for the screen, which cannot see this isolate.
+    await FlutterForegroundTask.saveData(
+      key: ServiceState.storageKey,
+      value: ServiceState(connected: _connected, unpaired: _unpaired, heardAt: _heardAt).encode(),
     );
   }
 
@@ -389,6 +441,9 @@ class AlertTaskHandler extends TaskHandler {
     // (allowAutoRestart), and stopping the noise until then is all there is to do.
     _sse?.stop();
     await _alarm?.dispose();
+    // A service that has stopped cannot act on its banners or silence them later.
+    await _withdrawAll();
+    await FlutterForegroundTask.removeData(key: ServiceState.storageKey);
   }
 
   @override

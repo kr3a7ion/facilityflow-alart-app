@@ -153,7 +153,7 @@ class _AlertsAppState extends State<AlertsApp> {
                   await _requestPermissions();
                   await _startService();
                 })
-              : HomeScreen(config: _config!, onUnpair: _unpair),
+              : HomeScreen(config: _config!, onUnpair: _unpair, onStartService: _startService),
     );
   }
 }

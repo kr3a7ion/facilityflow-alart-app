@@ -22,9 +22,22 @@ import 'package:vibration/vibration.dart';
 class Alarm {
   Alarm() {
     _player.setReleaseMode(ReleaseMode.loop);
+    // Another app taking the audio — music, a video, a voice note — pauses the player,
+    // and the loop never resumes by itself. This used to leave the alarm believing it was
+    // ringing, so every later start() returned early and the phone stayed silent while
+    // the vibration carried on. Forgetting it was running lets the service's next tick
+    // (every 30 seconds) start it again. This file never pauses the player itself; a stop
+    // is only ever its own, and is left alone.
+    _interruptions = _player.onPlayerStateChanged.listen((state) {
+      if (_running && (state == PlayerState.paused || state == PlayerState.completed)) {
+        _running = false;
+        _voice = null;
+      }
+    });
   }
 
   final AudioPlayer _player = AudioPlayer();
+  late final StreamSubscription<PlayerState> _interruptions;
   bool _running = false;
   String? _voice;
   Timer? _buzz;
@@ -92,6 +105,7 @@ class Alarm {
 
   Future<void> dispose() async {
     await stop();
+    await _interruptions.cancel();
     await _player.dispose();
   }
 }
