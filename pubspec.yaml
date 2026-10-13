@@ -7,7 +7,9 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  # flutter_foreground_task 11 needs Dart 3.12 / Flutter 3.44, which the lockfile already did.
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
@@ -15,7 +17,7 @@ dependencies:
 
   # The foreground service. Everything else in this app is ordinary Flutter; this is the
   # piece that makes it keep working with the screen off and the app swiped away.
-  flutter_foreground_task: ^8.10.4
+  flutter_foreground_task: ^11.0.3
 
   # Heads-up notifications with an Accept action, so a job can be taken from the lock
   # screen without unlocking the phone.

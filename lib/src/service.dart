@@ -383,7 +383,10 @@ class AlertTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp) async {
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    // isTimeout is Android ending a time-limited service type. specialUse has no limit, so
+    // it should never be true here; either way the plugin brings the service back
+    // (allowAutoRestart), and stopping the noise until then is all there is to do.
     _sse?.stop();
     await _alarm?.dispose();
   }
