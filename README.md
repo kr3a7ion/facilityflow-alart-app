@@ -135,6 +135,14 @@ The pairing code is generated in a browser where the person is already signed in
 app never asks for a password and never stores one. Losing a phone costs one **Unpair** on
 the website, not a password change.
 
+**Updating.** Copy the new APK into the host's data folder as `app.apk`. The host reads its
+build number out of the file and reports it on `/api/health`; every phone on an older build
+says so on its home screen with an **Update** button, and the service posts one notification
+per new build so a phone nobody opens hears too. **Update** opens `/app.apk` in the phone's
+browser, so it installs exactly as the first one did, and the pairing is kept. A build made
+by hand (`dev`) is never told to update. Needs a host that reports the installer's build;
+an older one says nothing and nothing is offered.
+
 ## The thing that will actually go wrong
 
 **Phone manufacturers kill background apps.** Tecno, Infinix, itel, Xiaomi, Oppo, Vivo and

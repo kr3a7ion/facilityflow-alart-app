@@ -11,6 +11,7 @@ import 'notices.dart';
 import 'ringing.dart';
 import 'readiness.dart';
 import 'sse.dart';
+import 'update.dart';
 
 /// Entry point for the foreground service isolate.
 ///
@@ -67,6 +68,7 @@ class AlertTaskHandler extends TaskHandler {
   String? _userId;
   ReadinessReporter? _readiness;
   final _notifications = FlutterLocalNotificationsPlugin();
+  UpdateWatch? _updates;
 
   Waiting _state = const Waiting();
   bool _connected = false;
@@ -149,6 +151,9 @@ class AlertTaskHandler extends TaskHandler {
   /// ring or the alert within a minute rather than never.
   @override
   Future<void> onRepeatEvent(DateTime timestamp) async {
+    // A newer build on the host: told once, from here, so a phone nobody opens still hears.
+    final config = _config;
+    if (config != null) unawaited((_updates ??= UpdateWatch(config.baseUrl, _notifications)).check());
     if (DateTime.now().difference(_lastCheck) > const Duration(seconds: 50)) {
       await _refresh();
     }
