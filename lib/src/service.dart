@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'alarm.dart';
 import 'api.dart';
 import 'config.dart';
+import 'notices.dart';
 import 'ringing.dart';
 import 'sse.dart';
 
@@ -59,6 +60,7 @@ int notificationId(String key) {
 class AlertTaskHandler extends TaskHandler {
   SseClient? _sse;
   Alarm? _alarm;
+  Notices? _notices;
   Config? _config;
   Api? _api;
   String? _userId;
@@ -116,14 +118,26 @@ class AlertTaskHandler extends TaskHandler {
     _sse = SseClient(
       url: config.baseUrl,
       token: config.token,
-      onEvent: (_) => unawaited(_refresh()),
+      onEvent: (kind) {
+        unawaited(_refresh());
+        // The bell on the website just changed: show what it says.
+        if (kind == 'notification') unawaited(_notices?.check());
+      },
       onState: (up) {
         _connected = up;
         // Whatever happened while the line was down was never delivered.
-        if (up) unawaited(_refresh());
+        if (up) {
+          unawaited(_refresh());
+          unawaited(_notices?.check());
+        }
         unawaited(_updateOngoing());
       },
     )..start();
+
+    // The person's other notices — escalations, mains failure, a job taken away — shown by
+    // how loud the host says they are. See notices.dart.
+    _notices = Notices(_api!, _notifications);
+    unawaited(_notices!.start());
 
     await _refresh();
   }
@@ -440,6 +454,7 @@ class AlertTaskHandler extends TaskHandler {
     // it should never be true here; either way the plugin brings the service back
     // (allowAutoRestart), and stopping the noise until then is all there is to do.
     _sse?.stop();
+    _notices?.stop();
     await _alarm?.dispose();
     // A service that has stopped cannot act on its banners or silence them later.
     await _withdrawAll();

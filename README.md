@@ -42,6 +42,12 @@ not a defect.
   goes quiet.
 - Reports its connection to the host continuously, so a supervisor can see a phone that
   has stopped listening.
+- Shows the person's other **notices** — the bell on the website: an escalation, mains
+  failure, a job taken away or sent back — as ordinary notifications, as loud as the host
+  says each one is (`urgent`, normal, `quiet`). It only reads them (`GET
+  /api/notifications`); marking them read stays on the website. A newly paired phone
+  starts after the newest notice rather than replaying the bell. Needs a host that lets
+  phones read notices; an older one refuses and the phone simply doesn't ask again.
 
 Accepting from the notification calls the same endpoint the website calls. The host emits
 on its event bus, and the ringing stops on every device at once — this phone, the duty
