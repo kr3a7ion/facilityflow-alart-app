@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'config.dart';
+import 'ringing.dart' show ServiceState;
 import 'service.dart' show performAction;
 
 /// What the person sees when they open the app on purpose.
@@ -16,10 +17,18 @@ import 'service.dart' show performAction;
 /// is the website's job, and the button at the bottom takes them there rather than this
 /// app growing a second, worse copy of it.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.config, required this.onUnpair});
+  const HomeScreen({
+    super.key,
+    required this.config,
+    required this.onUnpair,
+    required this.onStartService,
+  });
 
   final Config config;
   final VoidCallback onUnpair;
+
+  /// Start the listening service again, when it is not running.
+  final Future<void> Function() onStartService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -37,6 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// on: wiping the pairing on the spot also fired for a host restored from an older
   /// backup, and threw away a pairing the person had no way to know was gone.
   bool _unpairedOnHost = false;
+
+  /// Whether the listening service is running, and what it says about itself. This card
+  /// is the answer to "is it listening", so it comes from the service — not from this
+  /// screen's own requests, which said "Listening" even with the service dead.
+  bool? _serviceRunning;
+  ServiceState? _service;
+  bool _starting = false;
   Timer? _poll;
 
   late final Api _api = Api(widget.config.baseUrl, widget.config.token);
@@ -57,6 +73,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    try {
+      final running = await FlutterForegroundTask.isRunningService;
+      final state = ServiceState.decode(
+          await FlutterForegroundTask.getData<String>(key: ServiceState.storageKey));
+      if (mounted) setState(() { _serviceRunning = running; _service = running ? state : null; });
+    } catch (_) {
+      // Leave the last answer; the next poll asks again.
+    }
     try {
       final userId = _userId ??=
           widget.config.userId.isNotEmpty ? widget.config.userId : await _api.myUserId();
@@ -95,6 +119,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await _refresh();
   }
 
+  Future<void> _startListening() async {
+    setState(() => _starting = true);
+    try {
+      await widget.onStartService();
+    } finally {
+      if (mounted) setState(() => _starting = false);
+      await _refresh();
+    }
+  }
+
   Future<void> _openWebsite() async {
     final opened = await launchUrl(
       Uri.parse(widget.config.baseUrl),
@@ -126,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (_unpairedOnHost)
+            if (_unpairedOnHost || (_service?.unpaired ?? false))
               Card(
                 color: Theme.of(context).colorScheme.errorContainer,
                 child: ListTile(
@@ -140,18 +174,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               )
+            else if (_serviceRunning == false)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.notifications_off),
+                  title: const Text('Not listening'),
+                  subtitle: const Text('The part of the app that rings has stopped, so this '
+                      'phone will not ring for jobs until it is started again.'),
+                  trailing: FilledButton(
+                    onPressed: _starting ? null : _startListening,
+                    child: const Text('Start listening'),
+                  ),
+                ),
+              )
+            else if (_service != null && !_service!.connected)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.wifi_off),
+                  title: const Text('Not connected to the host'),
+                  subtitle: Text('Trying again by itself. ${_heardWords(_service!.heardAt)} '
+                      'Check the phone is on the property wifi.'),
+                ),
+              )
             else
               Card(
-                color: _reachable
+                color: _reachable || _service != null
                     ? Theme.of(context).colorScheme.secondaryContainer
                     : Theme.of(context).colorScheme.errorContainer,
                 child: ListTile(
-                  leading: Icon(_reachable ? Icons.wifi_tethering : Icons.wifi_off),
-                  title: Text(_reachable ? 'Listening for jobs' : 'Cannot reach the host'),
-                  subtitle: Text(_reachable
+                  leading: Icon(_reachable || _service != null
+                      ? Icons.wifi_tethering
+                      : Icons.wifi_off),
+                  title: Text(_reachable || _service != null
+                      ? 'Listening for jobs'
+                      : 'Cannot reach the host'),
+                  subtitle: Text(_reachable || _service != null
                       ? '${c.displayName} · ${c.roleName}'
-                      : 'Check you are on the property wifi. The app cannot alert you from '
-                        'outside the building.'),
+                      : 'Check the phone is on the property wifi.'),
                 ),
               ),
             const SizedBox(height: 16),
@@ -288,4 +349,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+/// "Last heard from it 4 minutes ago." — or nothing, when it never has been.
+String _heardWords(DateTime? at) {
+  if (at == null) return '';
+  final ago = DateTime.now().difference(at);
+  final words = ago.inMinutes < 1
+      ? 'just now'
+      : ago.inMinutes < 60
+          ? '${ago.inMinutes} minute${ago.inMinutes == 1 ? '' : 's'} ago'
+          : '${ago.inHours} hour${ago.inHours == 1 ? '' : 's'} ago';
+  return 'Last heard from it $words.';
 }

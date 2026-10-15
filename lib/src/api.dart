@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'version.dart';
+
 /// A job handed to this person, or to a team they lead, and not yet picked up.
 class WaitingJob {
   const WaitingJob({
@@ -253,7 +255,7 @@ class Api {
     required String baseUrl,
     required String code,
     required String deviceName,
-    String appVersion = '1.0.0',
+    String appVersion = buildVersion,
   }) async {
     final r = await http
         .post(
