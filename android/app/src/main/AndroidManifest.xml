@@ -8,10 +8,13 @@
       POST_NOTIFICATIONS           — Android 13+. Without it there is no foreground
                                      service notification, and so no foreground service.
       FOREGROUND_SERVICE           — the service itself.
-      FOREGROUND_SERVICE_DATA_SYNC — Android 14+ makes you name the type. Holding a
-                                     connection to a server and acting on what comes down
-                                     it is dataSync; this app is sideloaded, so there is
-                                     no Play policy review to satisfy, only the OS.
+      FOREGROUND_SERVICE_SPECIAL_  — Android 14+ makes you name the type. Not dataSync:
+        USE                          Android 15 stops a dataSync service after six hours
+                                     in any twenty-four and will not start one at boot,
+                                     and a pager that goes deaf mid-shift or after a
+                                     restart is worse than none. specialUse has neither
+                                     limit. The app is sideloaded, so there is no Play
+                                     review of the declared use, only the OS.
       WAKE_LOCK                    — keeps the CPU alive long enough to raise the alarm
                                      when a job lands at 3am with the screen off.
       VIBRATE                      — felt before it is heard, next to a running set.
@@ -21,14 +24,17 @@
         OPTIMIZATIONS                Doze stops the service within hours.
       USE_FULL_SCREEN_INTENT       — a P1 wakes the lock screen rather than waiting to be
                                      pulled down.
-      SCHEDULE_EXACT_ALARM         — not used to schedule work, only so the re-ask timing
-                                     is not smeared across Doze windows.
+      SCHEDULE_EXACT_ALARM         — when the system kills the service, it is brought back
+                                     by an alarm a few seconds later; without this the
+                                     alarm is inexact and Doze can push it out by minutes.
+                                     Not granted by default on Android 14+, so the app
+                                     asks once.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -66,14 +72,28 @@
             </intent-filter>
         </activity>
 
-        <!-- Declared explicitly so the dataSync type is attached on Android 14+. -->
+        <!-- Declared explicitly so the type is attached on Android 14+. See
+             FOREGROUND_SERVICE_SPECIAL_USE above for why it is not dataSync. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Holds a connection to the property's maintenance server so an urgent job, a supervisor ringing this person, or an emergency alert rings the phone the moment it happens, with the screen off." />
+        </service>
 
         <!-- The boot/package-replaced receiver comes from flutter_foreground_task's own
              manifest; redeclaring it here with different attributes breaks the merge. -->
+
+        <!-- The lock-screen buttons — Accept, I am here, I have seen this. They are sent
+             without opening the app (showsUserInterface: false), which flutter_local_
+             notifications delivers as a broadcast to this receiver. Its own manifest does
+             not declare it; without this line every press is dropped and the alarm can
+             only be stopped by unlocking the phone and opening the app. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
 
         <meta-data
             android:name="flutterEmbedding"

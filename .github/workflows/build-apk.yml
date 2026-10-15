@@ -4,8 +4,13 @@
 # attached to the run as an artifact: open the run on the Actions tab, scroll to
 # "Artifacts", download, unzip, and copy app-release.apk onto the host PC as data/app.apk.
 #
-# Signing: with no android/key.properties the release build is signed with the debug key
-# (see android/app/build.gradle.kts). That installs fine. No keystore or secret is read here.
+# Signing: every APK must be signed with the same key, or Android refuses to install it over
+# the last one — the phone has to uninstall first, which throws away its pairing. The key
+# comes from four repository secrets (README → "Signing"). Without them the build is signed
+# with this runner's debug key, which is different on every run, and says so in a warning.
+#
+# Versioning: the version name comes from pubspec.yaml and the build number from this
+# workflow's run number, so every APK is newer than the last and says which run made it.
 name: Build APK
 
 on:
@@ -55,13 +60,44 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Version
+        id: version
+        run: |
+          name=$(sed -nE 's/^version: *([^+ ]+).*/\1/p' pubspec.yaml)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "Building $name+${{ github.run_number }}"
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning title=Not release-signed::No ANDROID_KEYSTORE_BASE64 secret, so this APK is signed with a throwaway key and will not install over any other build. See README, Signing."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+
       - name: Build release APK
-        run: flutter build apk --release
+        run: >
+          flutter build apk --release
+          --build-name=${{ steps.version.outputs.name }}
+          --build-number=${{ steps.version.outputs.code }}
+          --dart-define=APP_VERSION=${{ steps.version.outputs.name }}+${{ steps.version.outputs.code }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
         with:
-          name: facilityflow-alerts-${{ github.sha }}
+          name: facilityflow-alerts-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
           if-no-files-found: error
