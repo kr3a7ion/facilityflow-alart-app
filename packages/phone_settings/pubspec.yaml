@@ -1,0 +1,22 @@
+name: phone_settings
+description: >-
+  Reads the phone settings that decide whether a ring is heard: the alarm volume, whether
+  the app may post notifications and take over the lock screen, and whether the battery
+  manager has been told to leave it alone. Android only, and only for this app.
+publish_to: "none"
+version: 1.0.0
+
+environment:
+  sdk: ^3.12.0
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.facilityflow.phone_settings
+        pluginClass: PhoneSettingsPlugin

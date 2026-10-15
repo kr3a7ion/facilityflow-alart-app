@@ -33,6 +33,12 @@ not a defect.
   `/api/me/rings`, `/api/me/outstanding`), so a reconnect settles everything at once.
 - Rings on the **alarm audio stream**, so it is heard through a phone set to silent, and
   vibrates.
+- Checks that it **would be heard**: it reads its own alarm volume, notification and
+  full-screen permission and battery exemption, says on its home screen what is wrong and
+  where to fix it, and tells the host (`POST /api/me/phone`) so the supervisor's *Who can
+  hear an alert* list shows a phone that is connected but silent. The reading is done by the
+  small plugin in `packages/phone_settings`, so the background service can do it too. An
+  older host refuses the report and the phone stops sending it.
 - Shows a heads-up notification whose button works from the lock screen; emergencies and
   rings wake the screen.
 - Keeps ringing until the job is accepted, reassigned or cancelled — or until the host's

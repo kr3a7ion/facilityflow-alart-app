@@ -36,6 +36,12 @@ dependencies:
   url_launcher: ^6.3.0
   shared_preferences: ^2.3.2
 
+  # The alarm volume, notification and full-screen permission, and battery exemption: the
+  # settings that decide whether a ring is heard. Local, because it has to work in the
+  # foreground service's engine. See packages/phone_settings.
+  phone_settings:
+    path: packages/phone_settings
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
