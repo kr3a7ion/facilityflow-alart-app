@@ -8,6 +8,7 @@ import 'api.dart';
 import 'config.dart';
 import 'ringing.dart' show ServiceState;
 import 'service.dart' show performAction;
+import 'update.dart';
 
 /// What the person sees when they open the app on purpose.
 ///
@@ -57,10 +58,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   late final Api _api = Api(widget.config.baseUrl, widget.config.token);
 
+  /// What the host hands out, when it is newer than this phone. Asked once when the screen
+  /// opens; the service asks every few hours and notifies.
+  HostApp? _newer;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _checkForUpdate();
     // The service holds the live connection; this screen only needs to look current
     // while somebody is actually watching it.
     _poll = Timer.periodic(const Duration(seconds: 10), (_) => _refresh());
@@ -126,6 +132,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _starting = false);
       await _refresh();
+    }
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final host = await fetchHostApp(widget.config.baseUrl);
+      if (mounted && isNewer(host, myBuild)) setState(() => _newer = host);
+    } catch (_) {
+      // Unreachable: the status card already says so.
+    }
+  }
+
+  Future<void> _update() async {
+    final opened = await openInstaller(widget.config.baseUrl);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Open ${widget.config.baseUrl}/app.apk in your browser.'),
+      ));
     }
   }
 
@@ -312,6 +336,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   )),
+            if (_newer != null)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.system_update),
+                  title: const Text('A newer version is on the host'),
+                  subtitle: Text('The host has ${_newer!.words}; this phone has build $myBuild. '
+                      'It installs the way this one did, and stays paired.'),
+                  trailing: FilledButton(onPressed: _update, child: const Text('Update')),
+                ),
+              ),
             const SizedBox(height: 24),
             const Divider(),
             ListTile(
