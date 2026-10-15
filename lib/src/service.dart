@@ -347,7 +347,9 @@ class AlertTaskHandler extends TaskHandler {
   Future<void> _showJob(WaitingJob job) => _post(
         'job:${job.id}',
         '${job.priority} · ${job.title}',
-        'Assigned to you — ${job.ref}',
+        job.teamName == null
+            ? 'Assigned to you — ${job.ref}'
+            : '${job.ref} is with your team',
         'accept',
         'Accept',
         job.id,
@@ -406,7 +408,12 @@ class AlertTaskHandler extends TaskHandler {
       // counting it here also hid "Not connected" behind an old job.
       final live = _state.jobs.where((j) => !j.ringingOver).toList();
       final n = live.length;
-      title = n == 1 ? 'A job is waiting for you' : '$n jobs are waiting for you';
+      // One team job reads as the website's banner does: it needs a name put on it.
+      title = n == 1
+          ? (live.first.teamName != null
+              ? 'A job for your team needs someone'
+              : 'A job is waiting for you')
+          : '$n jobs are waiting for you';
       text = live.first.title;
     } else if (_connected) {
       title = 'Listening for jobs';

@@ -303,9 +303,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       title: Text(j.title,
                           style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(j.pastDeadline
-                          ? '${j.ref} · past its response time — your supervisor has been told'
-                          : j.ref),
+                      subtitle: Text([
+                        [
+                          j.ref,
+                          if (j.teamName != null) '${j.teamName} team',
+                          if (j.pastDeadline)
+                            'past its response time — your supervisor has been told',
+                        ].join(' · '),
+                        // Handed to a team this person leads, with nobody's name on it yet.
+                        // Accept still works and stops the ringing; the website's banner
+                        // offers Assign for the same job.
+                        if (j.teamName != null)
+                          'Needs someone’s name on it — assign it on the website, or accept it yourself.',
+                      ].join('\n')),
                       trailing: FilledButton(
                         onPressed: () => _act('accept', j.id),
                         child: const Text('Accept'),

@@ -27,7 +27,9 @@ not a defect.
 - Rings for three things, most urgent first:
   1. an **emergency alert** this person has not acknowledged — **I have seen this**;
   2. **somebody ringing them** (the bell / *Ring* on the website) — **I am here**;
-  3. a **job assigned to them** and not yet accepted — **Accept**.
+  3. a **job assigned to them** and not yet accepted — **Accept**. A team lead who can
+     hand work out is also rung for a job given to their team with nobody's name on it,
+     shown as *WO-1042 · Civil team* until it is assigned on the website or they accept it.
 
   Every nudge on the stream re-asks the host for all three (`/api/alerts/emergency`,
   `/api/me/rings`, `/api/me/outstanding`), so a reconnect settles everything at once.

@@ -69,4 +69,28 @@ void main() {
       expect(WaitingJob.fromJson({'id': 'j8'}).ringingOver, isFalse);
     });
   });
+
+  group('WaitingJob.teamName', () {
+    test('a job handed to a team this person leads carries the team', () {
+      final job = WaitingJob.fromJson({
+        'id': 'j9',
+        'ref': 'WO-1043',
+        'title': 'Leak under sink, block C',
+        'priority': 'P2',
+        'team_name': 'Civil',
+      });
+      expect(job.teamName, 'Civil');
+      expect(job.ref, 'WO-1043');
+    });
+
+    test('a job in this person’s own name has none', () {
+      final job = WaitingJob.fromJson({'id': 'j10', 'ref': 'WO-1044', 'team_name': null});
+      expect(job.teamName, isNull);
+    });
+
+    test('a host older than team_name reads as a job in this person’s own name', () {
+      final job = WaitingJob.fromJson({'id': 'j11', 'ref': 'WO-1045'});
+      expect(job.teamName, isNull);
+    });
+  });
 }
