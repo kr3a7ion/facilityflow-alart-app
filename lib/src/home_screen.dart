@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'config.dart';
+import 'readiness.dart';
 import 'ringing.dart' show ServiceState;
 import 'service.dart' show performAction;
 
@@ -55,6 +56,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _starting = false;
   Timer? _poll;
 
+  /// What this phone's own settings say about whether it will be heard. Read here as well
+  /// as by the service, so the person holding the phone sees it without asking the host.
+  Readiness? _readiness;
+
   late final Api _api = Api(widget.config.baseUrl, widget.config.token);
 
   @override
@@ -73,6 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    final readiness = await readReadiness();
+    if (mounted) setState(() => _readiness = readiness);
     try {
       final running = await FlutterForegroundTask.isRunningService;
       final state = ServiceState.decode(
@@ -144,6 +151,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final c = widget.config;
+    final problems = _readiness == null ? const <String>[] : problemsOf(_readiness!);
+    final silent = problems.contains('volume_off');
     return Scaffold(
       appBar: AppBar(
         title: Text(c.propertyName.isEmpty ? 'FacilityFlow' : c.propertyName),
@@ -213,6 +222,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   subtitle: Text(_reachable || _service != null
                       ? '${c.displayName} · ${c.roleName}'
                       : 'Check the phone is on the property wifi.'),
+                ),
+              ),
+            // The supervisor's screen shows the same list, from what the service reports.
+            if (problems.isNotEmpty)
+              Card(
+                color: silent
+                    ? Theme.of(context).colorScheme.errorContainer
+                    : Theme.of(context).colorScheme.tertiaryContainer,
+                child: ListTile(
+                  leading: Icon(silent ? Icons.volume_off : Icons.warning_amber),
+                  title: Text(silent ? 'This phone will not be heard' : 'This phone may not be heard'),
+                  subtitle: Text([
+                    for (final p in problems) problemWords(p, _readiness!.alarmVolume),
+                  ].join('\n\n')),
                 ),
               ),
             const SizedBox(height: 16),

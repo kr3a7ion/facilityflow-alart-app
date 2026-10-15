@@ -9,6 +9,7 @@ import 'api.dart';
 import 'config.dart';
 import 'notices.dart';
 import 'ringing.dart';
+import 'readiness.dart';
 import 'sse.dart';
 
 /// Entry point for the foreground service isolate.
@@ -64,6 +65,7 @@ class AlertTaskHandler extends TaskHandler {
   Config? _config;
   Api? _api;
   String? _userId;
+  ReadinessReporter? _readiness;
   final _notifications = FlutterLocalNotificationsPlugin();
 
   Waiting _state = const Waiting();
@@ -154,6 +156,10 @@ class AlertTaskHandler extends TaskHandler {
     // and one the host has stopped confirming goes quiet.
     await _sound();
     await _updateOngoing();
+    // Whether this phone would be heard: the alarm volume and the rest can change at any
+    // time, so they are read every tick and the host is told when they do. See readiness.dart.
+    final api = _api;
+    if (api != null) unawaited((_readiness ??= ReadinessReporter(api)).check());
   }
 
   /// Ask the host for everything at once.
