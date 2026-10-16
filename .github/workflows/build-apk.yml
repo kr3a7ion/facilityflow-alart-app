@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
@@ -95,7 +95,7 @@ jobs:
           --dart-define=APP_VERSION=${{ steps.version.outputs.name }}+${{ steps.version.outputs.code }}
 
       - name: Upload APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: facilityflow-alerts-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
           path: build/app/outputs/flutter-apk/app-release.apk
